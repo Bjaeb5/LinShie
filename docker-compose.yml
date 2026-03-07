@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: linuxshield_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-linuxshield}
+      POSTGRES_USER: ${POSTGRES_USER:-linuxshield}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - linuxshield_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linuxshield}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: linuxshield_redis
+    restart: unless-stopped
+    networks:
+      - linuxshield_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: linuxshield_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-linuxshield}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-linuxshield}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - /etc/os-release:/etc/os-release:ro
+    networks:
+      - linuxshield_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    privileged: false
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: linuxshield_celery
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info --concurrency=4
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-linuxshield}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-linuxshield}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    networks:
+      - linuxshield_net
+    depends_on:
+      - backend
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: linuxshield_frontend
+    restart: unless-stopped
+    networks:
+      - linuxshield_net
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: linuxshield_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - linuxshield_net
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  nginx_logs:
+
+networks:
+  linuxshield_net:
+    driver: bridge
