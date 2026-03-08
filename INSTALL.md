@@ -23,7 +23,7 @@ newgrp docker
 
 ### Шаг 2. Клонирование репозитория
 ```bash
-git clone https://github.com/AidarAkhm/LinShie.git
+git clone https://github.com/Bjaeb5/LinShie.git
 cd LinShie
 ```
 
