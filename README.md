@@ -34,7 +34,7 @@
 ### Установка одной командой
 
 ```bash
-git clone https://github.com/AidarAkhm/LinShie.git
+git clone https://github.com/Bjaeb5/LinShie.git
 cd LinShie
 chmod +x init.sh && ./init.sh
 ```
